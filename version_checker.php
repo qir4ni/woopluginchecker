@@ -5,6 +5,44 @@ require 'vendor/autoload.php';
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
 $dotenv->safeLoad();
 
+// Get all chat ID from Telegram bot
+function getAllChatId() {
+    $telegram_bot_token = $_ENV['TELEGRAM_BOT_TOKEN'];
+    // Define the URL and data
+    $url = "https://api.telegram.org/bot$telegram_bot_token/getUpdates";
+
+    // Prepare POST data
+    $options = [
+        'http' => [
+            'method'  => 'POST',
+            'header'  => 'Content-type: application/json',
+            // 'content' => json_encode($data),
+        ],
+    ];
+
+    // Create stream context
+    $context  = stream_context_create($options);
+
+    // Perform POST request
+    $response =  file_get_contents($url, false, $context);  
+    
+    // return $response;
+
+    // Get all chat ids
+    $results = json_decode($response, true)['result'];
+
+    if (empty($results)) {
+        exit;
+    } else {
+        foreach( $results as $key => $result) {
+            $chat_ids[] = $results[$key]['message']['chat']['id'];
+        }
+
+        return $chat_ids;
+    }
+}
+
+
 // Get latest Woo plugins
 function getLatestWooVersion() {
     // POST request on WooCommerce json helper
@@ -60,13 +98,15 @@ function readLogFile($file) {
 }
 
 // Function to send a message to Telegram
-function sendTelegramMessage($message) {
-    $telegramBotToken = $_ENV['TELEGRAM_BOT_TOKEN'];
-    // echo getenv('TELEGRAM_BOT_TOKEN'];
-    $chatId = $_ENV['CHAT_ID'];
-    $url = "https://api.telegram.org/bot$telegramBotToken/sendMessage?chat_id=$chatId&text=" . urlencode($message);
-    // echo $url . PHP_EOL;
-    file_get_contents($url);
+function sendTelegramMessage($message, $chat_ids) {
+    $telegram_bot_token = $_ENV['TELEGRAM_BOT_TOKEN'];
+
+    // Send text to all unique chat_ids
+    foreach (array_unique($chat_ids) as $chat_id)
+    { 
+        $url = "https://api.telegram.org/bot$telegram_bot_token/sendMessage?chat_id=$chat_id&text=" . urlencode($message);
+        file_get_contents($url);
+    }   
 }
 
 // Main
@@ -100,7 +140,7 @@ foreach ($woo_products as $product_id => $product) {
         if ($product_id == $id) {
             if ($woo_products[$product_id]['version'] != $response[$id]['version']) {
                 $message = 'New version of ' . ucwords(str_replace('-', ' ', $response[$id]['slug'])) . ' ( ' . $woo_products[$product_id]['version'] . ' -> ' . $response[$id]['version'] . ' ) is release.';
-                sendTelegramMessage($message);
+                sendTelegramMessage($message, $chat_ids);
 
                 // Version changed
                 $changed = true;
